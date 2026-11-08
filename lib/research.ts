@@ -1,0 +1,13 @@
+import type {Scenario,Plan,Community} from './types';
+import {optimize,repairOnly,cheapestFirstRepair,deliveryOnly,noAction,evaluate} from './optimizer';
+export const baselines=(s:Scenario)=>[repairOnly(s),cheapestFirstRepair(s),deliveryOnly(s),noAction(s)];
+export function rng(seed:number){let state=seed>>>0;return ()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state/4294967296;};}
+export function syntheticScenario(random:()=>number):Scenario{
+ const int=(a:number,b:number)=>a+Math.floor(random()*(b-a+1));
+ return {days:int(4,10),budget:int(10,90)*1000,litersPerPersonPerDay:15,communities:Array.from({length:3},(_,i)=>({id:`ward-${i}`,name:`Synthetic ward ${i+1}`,people:int(150,1100),dailySupplyLiters:int(0,5000),storageLiters:int(0,15000),repairCost:int(8,35)*1000,repairDays:int(1,8),restoredLitersPerDay:int(2500,15000),deliveryCostPerDay:int(2,8)*1000,deliveryLitersPerDay:int(2500,12000)}))};
+}
+export const percentile=(values:number[],p:number)=>{if(!values.length)return 0;const sorted=[...values].sort((a,b)=>a-b);const x=(sorted.length-1)*p;const lo=Math.floor(x),hi=Math.ceil(x);return sorted[lo]+(sorted[hi]-sorted[lo])*(x-lo);};
+export function evidence(seed=20261106,n=100){if(!Number.isInteger(n)||n<1||n>250)throw Error('Invalid scenario count');const random=rng(seed);const rows=[];for(let i=0;i<n;i++){const scenario=syntheticScenario(random);const joint=optimize(scenario);const others=baselines(scenario);rows.push({index:i+1,budget:scenario.budget,meanRepairDays:scenario.communities.reduce((a,c)=>a+c.repairDays,0)/3,joint:joint.unmetPersonDays,baselines:others.map(b=>b.unmetPersonDays)});}return rows;}
+export function dispatch(s:Scenario,plan:Plan){return Array.from({length:s.days},(_,day)=>s.communities.map(c=>{const repair=plan.actions.find(a=>a.communityId===c.id&&a.type==='repair');const delivery=plan.actions.find(a=>a.communityId===c.id&&a.type==='delivery'&&day>=a.startDay&&day<a.startDay+a.durationDays);return {day:day+1,community:c.name,repairCrew:!!repair&&day>=repair.startDay&&day<repair.startDay+repair.durationDays,deliveryLiters:delivery?c.deliveryLitersPerDay:0};})).flat();}
+export function durationSweep(s:Scenario,c:Community){return Array.from({length:s.days},(_,i)=>{const days=i+1;const test={...s,communities:[{...c,repairDays:days}]};const joint=optimize(test);const repair=joint.actions.some(a=>a.type==='repair');return {days,repair,unmet:joint.unmetPersonDays};});}
+export function communityUnmet(s:Scenario,plan:Plan,c:Community){return evaluate({...s,communities:[c]},plan.actions.filter(a=>a.communityId===c.id)).unmetPersonDays;}

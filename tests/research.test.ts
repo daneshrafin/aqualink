@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {evidence,dispatch,durationSweep,percentile,communityUnmet} from '../lib/research';import {demoScenario} from '../lib/demo';import {optimize,evaluate} from '../lib/optimizer';
+test('seeded evidence reproducible and baseline-dominant',()=>{const a=evidence(42,40),b=evidence(42,40);assert.deepEqual(a,b);for(const row of a){assert.ok(row.baselines.every(x=>row.joint<=x+1e-6));assert.ok(row.budget>=0);}});
+test('dispatch covers every day/community and uses modelled delivery volume',()=>{const plan=optimize(demoScenario);const rows=dispatch(demoScenario,plan);assert.equal(rows.length,demoScenario.days*demoScenario.communities.length);assert.ok(rows.every(r=>r.deliveryLiters>=0));});
+test('duration sweep bounded and per-community unmet sums to total',()=>{const p=optimize(demoScenario);assert.equal(durationSweep(demoScenario,demoScenario.communities[0]).length,demoScenario.days);const total=demoScenario.communities.reduce((sum,c)=>sum+communityUnmet(demoScenario,p,c),0);assert.ok(Math.abs(total-p.unmetPersonDays)<1e-6);});
+test('percentiles',()=>{assert.equal(percentile([1,2,3],.5),2);assert.equal(percentile([1,2,3],.1),1.2);});
